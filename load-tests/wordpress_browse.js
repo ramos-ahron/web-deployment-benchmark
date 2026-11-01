@@ -1,0 +1,7 @@
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export default function () {
+  http.get('http://localhost/');
+  sleep(1 + Math.random() * 2);
+}
