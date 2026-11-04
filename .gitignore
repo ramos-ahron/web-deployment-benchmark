@@ -1,0 +1,133 @@
+# ---------------------------------------------------------------
+# Secrets. Nothing in this section should ever be committed.
+# ---------------------------------------------------------------
+
+# Environment files (the .example templates are allowed)
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# Private keys and certificates
+id_rsa
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+*.pem
+*.key
+*.ppk
+*.p12
+*.pfx
+*.jks
+*.keystore
+# Public keys are fine to share
+!*.pub
+
+# VPN configs and tokens
+*.ovpn
+*.vpn
+wg*.conf
+*.auth
+
+# Credential and secret files by name
+secrets/
+.secrets/
+credentials*
+*credentials*.json
+*secret*
+!*secret*.example
+.htpasswd
+.netrc
+.pgpass
+.my.cnf
+.mylogin.cnf
+
+# WordPress config holds DB passwords and salts. Commit wp-config.example.php instead.
+wp-config.php
+wp-config-local.php
+
+# ---------------------------------------------------------------
+# Data that is too large or too sensitive for the repo
+# ---------------------------------------------------------------
+
+# Database dumps and baseline backups. Keep these on the VMs and
+# document where they live in infra/ or native/.
+*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+*.bak
+backups/
+
+# WordPress runtime content
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/debug.log
+debug.log
+
+# Raw point-by-point k6 output can reach hundreds of MB per run.
+# Commit summaries and monitoring CSVs, not these.
+results/**/raw/
+*.raw.json
+*.raw.csv
+*.raw.json.gz
+k6-raw-*.json
+k6-raw-*.csv
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# ---------------------------------------------------------------
+# Temporary and generated files
+# ---------------------------------------------------------------
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# General temp files
+*.tmp
+*.temp
+*.log
+*.pid
+*.orig
+*.rej
+tmp/
+temp/
+
+# Python (analysis and monitoring scripts)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# LaTeX build files (the final PDF is allowed)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+
+# Docker local overrides
+docker-compose.override.yml
