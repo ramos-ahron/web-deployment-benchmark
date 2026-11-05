@@ -43,6 +43,7 @@ credentials*
 .pgpass
 .my.cnf
 .mylogin.cnf
+authorized_keys
 
 # WordPress config holds DB passwords and salts. Commit wp-config.example.php instead.
 wp-config.php
@@ -52,16 +53,17 @@ wp-config-local.php
 # Data that is too large or too sensitive for the repo
 # ---------------------------------------------------------------
 
-# Database dumps and baseline backups. Keep these on the VMs and
-# document where they live in infra/ or native/.
+# Database dumps and baseline backups. Document their private locations.
 *.sql
 *.sql.gz
 *.sql.bz2
 *.dump
 *.bak
 backups/
+seng533-backups/
 
-# WordPress runtime content
+# Downloaded WordPress installation and runtime content
+wordpress/
 wp-content/uploads/
 wp-content/cache/
 wp-content/upgrade/
@@ -116,8 +118,9 @@ env/
 .ipynb_checkpoints/
 .pytest_cache/
 
-# Node
+# Node and Composer dependencies
 node_modules/
+vendor/
 
 # LaTeX build files (the final PDF is allowed)
 *.aux
