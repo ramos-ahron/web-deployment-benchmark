@@ -1,0 +1,16 @@
+
+version: '2.3'
+
+services:
+  wordpress:
+    build: .
+    image: seng533-wordpress:local
+    container_name: seng533-wordpress
+    restart: "no"
+    ports:
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./site:/var/www/html
+    cpus: 2.0
+    mem_limit: 3g
+    memswap_limit: 3g
