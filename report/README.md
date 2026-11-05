@@ -12,3 +12,10 @@ Planned contents:
 - The final PDF.
 
 Figures must match the saved data in `results/`.
+
+## Infrastructure contribution
+
+Nathan's setup progress, verified observations, and remaining work are documented in [nathan_infrastructure_section.md](nathan_infrastructure_section.md).
+
+Place reviewed screenshots and report figures in `figures/`. Setup verification must be distinguished from measured performance results.
+
