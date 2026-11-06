@@ -16,7 +16,18 @@ RES = Path(sys.argv[1] if len(sys.argv) > 1 else "results")
 MATRIX = Path(sys.argv[2] if len(sys.argv) > 2 else "load-tests/run_matrix.csv")
 OUT = Path("analysis/output"); OUT.mkdir(parents=True, exist_ok=True)
 ROLES = ("web", "db", "load")
-HOT_CPU = 80.0          # flag db/load VM if p95 of 1-s CPU samples exceeds this (%)
+HOT = {"db": 80.0, "load": 70.0}   # flag if p95 of 1-s CPU samples exceeds this (%); load-generator limit 70% per the proposal
+SLA_P95_MS, SLA_ERR_PCT = 1000.0, 1.0   # proposal: "max sustainable RPS" criterion = p95 < 1 s and error rate < 1%
+
+def ci95(s):
+    """Half-width of the 95% t-interval across repetitions (NaN if n < 2)."""
+    s = s.dropna(); n = len(s)
+    if n < 2: return float("nan")
+    try:
+        from scipy.stats import t; tc = t.ppf(0.975, n - 1)
+    except Exception:
+        tc = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26}.get(n - 1, 1.96)
+    return float(tc * s.std(ddof=1) / np.sqrt(n))
 KEEP = {"http_req_duration", "http_reqs", "http_req_failed", "app_check_failed"}
 
 def secs(s):
@@ -73,7 +84,7 @@ for d in sorted(p for p in RES.iterdir() if p.is_dir()):
     n = k["nreq"]
     r = dict(run_id=m["run_id"], deployment=m["deployment"], users=int(m["users"]), rep=int(m["repetition"]),
              workload=m.get("workload", "unknown"), k6_exit=int(m.get("k6_exit_code", -1)),
-             requests=n, p95_ms=float(np.percentile(k["dur"], 95)), median_ms=float(np.median(k["dur"])),
+             requests=n, mean_ms=float(np.mean(k["dur"])), p95_ms=float(np.percentile(k["dur"], 95)), p99_ms=float(np.percentile(k["dur"], 99)), median_ms=float(np.median(k["dur"])),
              http_fail_pct=100 * k["http_fail"] / n, app_fail_pct=100 * k["app_fail"] / n,
              ok_rps=(n - k["http_fail"] - k["app_fail"]) / nominal, window_s=k["t1"] - k["t0"], nominal_s=nominal)
     for role in ROLES:
@@ -83,22 +94,25 @@ for d in sorted(p for p in RES.iterdir() if p.is_dir()):
     if abs(r["window_s"] - nominal) / nominal > 0.05: status.append(dict(run_id=r["run_id"], issue=f"measure window {r['window_s']:.0f}s vs nominal {nominal}s"))
     for role in ROLES:
         if r.get(f"{role}_coverage", 0) < 0.9: status.append(dict(run_id=r["run_id"], issue=f"{role} monitoring coverage {r.get(f'{role}_coverage', 0):.0%} (<90%)"))
-    for role in ("db", "load"):
-        if r.get(f"{role}_cpu_p95", 0) > HOT_CPU: status.append(dict(run_id=r["run_id"], issue=f"{role} VM CPU p95 {r[f'{role}_cpu_p95']:.0f}% > {HOT_CPU:.0f}% (possible bottleneck)"))
+    for role, lim in HOT.items():
+        if r.get(f"{role}_cpu_p95", 0) > lim: status.append(dict(run_id=r["run_id"], issue=f"{role} VM CPU p95 {r[f'{role}_cpu_p95']:.0f}% > {lim:.0f}% (possible bottleneck)"))
 if matrix is not None:
     done = {r["run_id"] for r in rows}
     for rid in matrix.run_id:
         if rid not in done: status.append(dict(run_id=rid, issue="in run_matrix.csv but no usable results"))
 runs = pd.DataFrame(rows).sort_values(["workload", "deployment", "users", "rep"])
+runs["meets_criterion"] = (runs.p95_ms < SLA_P95_MS) & (runs.http_fail_pct < SLA_ERR_PCT)
 runs.to_csv(OUT / "runs.csv", index=False)
 pd.DataFrame(status, columns=["run_id", "issue"]).to_csv(OUT / "run_status.csv", index=False)
 
 def agg(df):
     g = df.groupby(["workload", "deployment", "users"])
     a = g.agg(n=("rep", "count"),
-              p95_mean=("p95_ms", "mean"), p95_sd=("p95_ms", "std"), p95_min=("p95_ms", "min"), p95_max=("p95_ms", "max"),
-              rps_mean=("ok_rps", "mean"), rps_sd=("ok_rps", "std"),
-              web_cpu_mean=("web_cpu_mean", "mean"), web_cpu_sd=("web_cpu_mean", "std"),
+              mean_ms=("mean_ms", "mean"), p99_ms=("p99_ms", "mean"),
+              p95_mean=("p95_ms", "mean"), p95_sd=("p95_ms", "std"), p95_ci95=("p95_ms", ci95), p95_min=("p95_ms", "min"), p95_max=("p95_ms", "max"),
+              rps_mean=("ok_rps", "mean"), rps_sd=("ok_rps", "std"), rps_ci95=("ok_rps", ci95),
+              web_cpu_mean=("web_cpu_mean", "mean"), web_cpu_sd=("web_cpu_mean", "std"), web_cpu_ci95=("web_cpu_mean", ci95),
+              runs_meeting_criterion=("meets_criterion", "sum"),
               web_mem_mb=("web_mem_mean_mb", "mean"), web_mem_sd=("web_mem_mean_mb", "std"),
               http_fail_pct=("http_fail_pct", "mean"), app_fail_pct=("app_fail_pct", "mean"),
               db_cpu_p95_max=("db_cpu_p95", "max"), load_cpu_p95_max=("load_cpu_p95", "max"))
@@ -110,7 +124,7 @@ def md(df, cols, fmt):
     for _, r in df.iterrows():
         lines.append("| " + " | ".join(fmt.get(c, "{}").format(r[c]) for c in cols) + " |")
     return "\n".join(lines)
-tbl = summ[["workload", "deployment", "users", "n", "http_fail_pct", "app_fail_pct", "web_mem_mb", "web_mem_sd"]]
+tbl = summ[["workload", "deployment", "users", "n", "http_fail_pct", "app_fail_pct", "web_mem_mb", "web_mem_sd", "runs_meeting_criterion"]]
 (OUT / "error_memory_table.md").write_text(md(tbl, list(tbl.columns),
     {"http_fail_pct": "{:.2f}", "app_fail_pct": "{:.2f}", "web_mem_mb": "{:.0f}", "web_mem_sd": "{:.0f}"}) + "\n")
 
@@ -121,10 +135,10 @@ def plot(wl, col, ylabel, fname):
     for i, dep in enumerate(deps):
         g = sub[sub.deployment == dep]; off = (i - (len(deps) - 1) / 2) * 1.2
         ax.scatter(g.users + off, g[col], s=14, alpha=.35)
-        s = g.groupby("users")[col].agg(["mean", "std"])
-        ax.errorbar(s.index + off, s["mean"], yerr=s["std"].fillna(0), marker="o", capsize=3, label=f"{dep} (n={g.groupby('users').size().min()}-{g.groupby('users').size().max()})")
+        s = g.groupby("users")[col].agg(["mean", ci95])
+        ax.errorbar(s.index + off, s["mean"], yerr=s["ci95"].fillna(0), marker="o", capsize=3, label=f"{dep} (n={g.groupby('users').size().min()}-{g.groupby('users').size().max()})")
     ax.set_xticks(sorted(sub.users.unique())); ax.set_xlabel("Concurrent users (k6 VUs)"); ax.set_ylabel(ylabel)
-    ax.set_title(f"{wl}\nmean ± SD across repetitions; dots = individual runs", fontsize=9)
+    ax.set_title(f"{wl}\nmean ± 95% CI (t, n-1 df) across repetitions; dots = individual runs", fontsize=9)
     ax.grid(alpha=.3); ax.legend(); fig.tight_layout(); fig.savefig(OUT / fname, dpi=200); plt.close(fig)
 
 for wl in runs.workload.unique():
