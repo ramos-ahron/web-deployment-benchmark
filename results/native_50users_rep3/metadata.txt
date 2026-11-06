@@ -1,0 +1,13 @@
+run_id=native_50users_rep3
+deployment=native
+users=50
+repetition=3
+workload=read-only-preliminary
+warmup=2m
+duration=5m
+start_utc=2026-11-06T08:17:18Z
+end_utc=2026-11-06T08:24:34Z
+git_commit=995a15e
+base_url=http://10.1.3.45
+k6_exit_code=0
+notes=
